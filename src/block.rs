@@ -4,7 +4,7 @@ use kiss3d::window::Window;
 use kiss3d::resource::Texture;
 use std::rc::Rc;
 
-pub const BLOCK_DIM: f32 = 10.0;
+pub const BLOCK_DIM: f32 = 1.0;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum BlockType {
