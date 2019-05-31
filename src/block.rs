@@ -4,7 +4,7 @@ use kiss3d::window::Window;
 use kiss3d::resource::Texture;
 use std::rc::Rc;
 
-pub const BLOCK_DIM: f32 = 1.0;
+pub const BLOCK_DIM: f32 = 10.0;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub enum BlockType {
@@ -24,7 +24,7 @@ impl Block {
         scene_node.set_texture(texture);
         scene_node.enable_backface_culling(true);
         //scene_node.set_color(0.0, 1.0, 0.0);
-        scene_node.set_local_translation(Translation3::new(pos.x as f32, pos.y as f32, pos.z as f32));
+        scene_node.set_local_translation(Translation3::new(pos.x as f32 * BLOCK_DIM, pos.y as f32 * BLOCK_DIM, pos.z as f32 * BLOCK_DIM));
 
         Block {
             block_type,

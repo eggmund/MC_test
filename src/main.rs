@@ -30,6 +30,7 @@ impl MainState {
     fn new() -> MainState {
         let mut window = Window::new("MC");
         window.set_light(Light::StickToCamera);
+        window.set_background_color(0.5898, 0.8477, 0.9844);
         let block_scene_node = window.add_group();
 
         let (block_textures, block_texture_name_map) = Self::load_block_textures();
