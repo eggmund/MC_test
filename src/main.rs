@@ -4,7 +4,7 @@ extern crate nalgebra as na;
 mod block;
 mod map;
 
-use na::{Point3, Vector3, UnitQuaternion, Translation3};
+use na::{Point3, Point2, Vector3, UnitQuaternion, Translation3};
 use kiss3d::{
     window::Window,
     light::Light,
@@ -14,37 +14,39 @@ use kiss3d::{
 use std::collections::HashMap;
 use std::path::Path;
 
-use block::{Block, BlockType};
-use map::{MapType};
+use crate::block::{Block, BlockType, Chunk};
+use crate::map::{MapType};
 
 struct MainState {
     window: Window,
-    block_scene_node: SceneNode,
     block_textures: TextureManager,
     block_texture_name_map: HashMap<BlockType, String>,
 
-    blocks: HashMap<Point3<u32>, Block>,
+    map_type: MapType,
+
+    //blocks: HashMap<Point3<u32>, Block>,
+    chunks: HashMap<Point2<i32>, Chunk>
 }
 
 impl MainState {
-    fn new() -> MainState {
+    fn new(map_type: MapType) -> MainState {
         let mut window = Window::new("MC");
         window.set_light(Light::StickToCamera);
         window.set_background_color(0.5898, 0.8477, 0.9844);
-        let block_scene_node = window.add_group();
 
         let (block_textures, block_texture_name_map) = Self::load_block_textures();
 
         let mut main = MainState {
             window,
-            block_scene_node,
             block_textures,
             block_texture_name_map,
 
-            blocks: HashMap::new(),
+            map_type,
+
+            chunks: HashMap::new(),
         };
 
-        main.load_map(MapType::Flat, 40, 40, 2);
+        main.load_map(map_type, 2, 2);
 
         main
     }
@@ -65,18 +67,17 @@ impl MainState {
         (tex_manager, name_map)
     }
 
-    fn load_map(&mut self, map_type: MapType, xwidth: u32, zwidth: u32, depth: u32) {
-        self.blocks = HashMap::new();
+    fn load_map(&mut self, map_type: MapType, xwidth: i32, zwidth: i32) {
+        self.chunks = HashMap::new();
 
         for x in 0..xwidth {
-            for y in 0..depth {
-                for z in 0..zwidth {
-                    self.add_block(BlockType::Grass, Point3::new(x, y, z));
-                }
+            for z in 0..zwidth {
+                self.add_chunk(Point2::new(x * block::CHUNK_DIM as i32, z * block::CHUNK_DIM as i32));
             }
         }
     }
 
+    /*
     fn add_block(&mut self, block_type: BlockType, pos: Point3<u32>) {
         let texture_name = self.block_texture_name_map.get(&block_type).unwrap();
 
@@ -102,11 +103,23 @@ impl MainState {
             None => panic!("Tried to remove block that does not exist at: {} {} {}", pos.x, pos.y, pos.z)
         };
     }
-    
+    */
+
+    fn add_chunk(&mut self, pos: Point2<i32>) {
+        if !self.chunks.contains_key(&pos) {
+            match self.map_type {
+                MapType::Flat => {
+                    self.chunks.insert(pos.clone(), Chunk::generate_flat_chunk(&mut self.window, pos));
+                }
+            }
+        } else {
+            panic!("Tried to add chunk that already exists: {} {}", pos.x, pos.y);
+        }
+    }
 }
 
 fn main() {
-    let mut game = MainState::new();
+    let mut game = MainState::new(MapType::Flat);
 
     game.mainloop();
 }
