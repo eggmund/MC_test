@@ -4,17 +4,16 @@ extern crate nalgebra as na;
 mod block;
 mod map;
 
-use na::{Point3, Point2, Vector3, UnitQuaternion, Translation3};
+use na::{Point2};
 use kiss3d::{
     window::Window,
     light::Light,
-    scene::SceneNode,
     resource::TextureManager,
 };
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::block::{Block, BlockType, Chunk};
+use crate::block::{BlockType, Chunk};
 use crate::map::{MapType};
 
 struct MainState {
@@ -46,7 +45,7 @@ impl MainState {
             chunks: HashMap::new(),
         };
 
-        main.load_map(map_type, 2, 2);
+        main.load_map(4, 4);
 
         main
     }
@@ -67,7 +66,7 @@ impl MainState {
         (tex_manager, name_map)
     }
 
-    fn load_map(&mut self, map_type: MapType, xwidth: i32, zwidth: i32) {
+    fn load_map(&mut self, xwidth: i32, zwidth: i32) {
         self.chunks = HashMap::new();
 
         for x in 0..xwidth {
@@ -77,39 +76,14 @@ impl MainState {
         }
     }
 
-    /*
-    fn add_block(&mut self, block_type: BlockType, pos: Point3<u32>) {
-        let texture_name = self.block_texture_name_map.get(&block_type).unwrap();
-
-        let texture = match self.block_textures.get(texture_name) {
-            Some(x) => x,
-            None => panic!("Texture not found {}", texture_name)
-        };
-        
-        if !self.blocks.contains_key(&pos) {
-            self.blocks.insert(pos, Block::new(&mut self.window, texture, block_type, pos));
-        } else {
-            panic!("Tried to add block at position already occupied: {} {} {}", pos.x, pos.y, pos.z);
-        }
-    }
-    
-    
-    fn remove_block(&mut self, pos: Point3<u32>) {
-        match self.blocks.get_mut(&pos) {
-            Some(b) => {
-                b.remove_scene_node(&mut self.window);
-                self.blocks.remove(&pos);
-            },
-            None => panic!("Tried to remove block that does not exist at: {} {} {}", pos.x, pos.y, pos.z)
-        };
-    }
-    */
-
     fn add_chunk(&mut self, pos: Point2<i32>) {
         if !self.chunks.contains_key(&pos) {
             match self.map_type {
                 MapType::Flat => {
-                    self.chunks.insert(pos.clone(), Chunk::generate_flat_chunk(&mut self.window, pos));
+                    self.chunks.insert(
+                        pos.clone(),
+                        Chunk::generate_flat_chunk(&mut self.window, &mut self.block_textures, &self.block_texture_name_map, pos)
+                    );
                 }
             }
         } else {

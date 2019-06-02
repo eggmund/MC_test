@@ -1,7 +1,7 @@
 use na::{Point3, Point2, Translation3};
 use kiss3d::scene::SceneNode;
 use kiss3d::window::Window;
-use kiss3d::resource::Texture;
+use kiss3d::resource::{Texture, TextureManager};
 use std::rc::Rc;
 use std::collections::HashMap;
 
@@ -10,7 +10,7 @@ use crate::map;
 //pub const BLOCK_DIM: f32 = 1.0;
 pub const CHUNK_DIM: u8 = 16;     // In blocks
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum BlockType {
     Grass,
 }
@@ -51,74 +51,80 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn new(window: &mut Window, pos: Point2<i32>, blocks: HashMap<Point3<u8>, Block>) -> Chunk {
-        let mut chunk = Chunk {
+    pub fn new(window: &mut Window, pos: Point2<i32>) -> Chunk {
+        Chunk {
             pos,
-            blocks,
+            blocks: HashMap::new(),
             scene_node: window.add_group(),
             block_scene_nodes: HashMap::new(),
-        };
-
-        chunk.register_blocks();
-
-        chunk
+        }
     }
 
-    pub fn generate_flat_chunk(window: &mut Window, pos: Point2<i32>) -> Chunk {
-        let mut blocks: HashMap<Point3<u8>, Block> = HashMap::new();
+    pub fn generate_flat_chunk(
+        window: &mut Window,
+        texture_manager: &mut TextureManager,
+        texture_names: &HashMap<BlockType, String>,
+        pos: Point2<i32>
+    ) -> Chunk {
+        let mut chunk = Chunk::new(window, pos);
 
         for x in 0..CHUNK_DIM {
             for y in 0..map::FLAT_WORLD_THICKNESS {
                 for z in 0..CHUNK_DIM {
-                    blocks.insert(Point3::new(x, y as u8, z), Block::new(BlockType::Grass));
+                    let texture_name = texture_names.get(&BlockType::Grass).unwrap();
+                    let texture = match texture_manager.get(texture_name) {
+                        Some(x) => x,
+                        None => panic!("Texture not found for grass.")
+                    };
+
+                    chunk.add_block(Point3::new(x, y as u8, z), texture, Block::new(BlockType::Grass), true);
                 }
             }
         }
-
-        let mut chunk = Chunk {
-            pos,
-            blocks,
-            scene_node: window.add_group(),
-            block_scene_nodes: HashMap::new(),
-        };
-
-        chunk.register_blocks();
+        chunk.update_visable_block_status();
 
         chunk
     }
 
-
-    // Initialises block_scene_nodes
-    fn register_blocks(&mut self) {
-        for (pos, b) in self.blocks.iter() {
-            let world_pos = Self::get_block_pos_from_chunk_and_rel_pos(&self.pos, pos);
-            let mut c = self.scene_node.add_cube(1.0, 1.0, 1.0);
-            c.set_local_translation(Translation3::new(world_pos.x as f32, world_pos.y as f32, world_pos.z as f32));
-            c.enable_backface_culling(true);
-
-            self.block_scene_nodes.insert(pos.clone(), c);
-        }
-    }
-
-    #[inline]
-    fn add_block_scene(&mut self, block_pos: &Point3<u8>, block_type: &BlockType) {
-        if !self.block_scene_nodes.contains_key(block_pos) {
-            let world_pos = Self::get_block_pos_from_chunk_and_rel_pos(&self.pos, block_pos);
-            let mut c = self.scene_node.add_cube(1.0, 1.0, 1.0);
-            c.set_local_translation(Translation3::new(world_pos.x as f32, world_pos.y as f32, world_pos.z as f32));
-            c.enable_backface_culling(true);
-
-            self.block_scene_nodes.insert(block_pos.clone(), c);
+    // Generating is for when the chunk is being generated. Don't check visibility until chunk is fully generated
+    fn add_block(&mut self, pos: Point3<u8>, texture: Rc<Texture>, block: Block, generating: bool) {
+        if !self.blocks.contains_key(&pos) {
+            self.blocks.insert(pos, block);
+            self.add_block_scene_node(texture, &pos, generating);
         } else {
-            panic!("Tried adding a block to scene node in chunk which has already been added.");
+            panic!("Tried to add block in chunk where block already exists.");
         }
     }
 
-    pub fn update(&mut self) {
-        
+    fn add_block_scene_node(&mut self, texture: Rc<Texture>, pos: &Point3<u8>, generating: bool) {
+        let world_pos = Self::get_block_pos_from_chunk_and_rel_pos(&self.pos, pos);
+
+        let mut c = self.scene_node.add_cube(1.0, 1.0, 1.0);
+        c.set_local_translation(Translation3::new(world_pos.x as f32, world_pos.y as f32, world_pos.z as f32));
+        c.enable_backface_culling(true);
+        c.set_texture(texture);
+
+        if !generating {
+            let vis = Self::is_block_visible(&self.blocks, pos);
+            println!("Not generating: {} {} {}, {}", pos.x, pos.y, pos.z, vis);
+            c.set_visible(vis);
+        }
+
+        self.block_scene_nodes.insert(pos.clone(), c);
     }
 
-    fn get_block_neighbours(&self, pos: &Point3<u8>) -> Vec<Point3<u8>> {
+    fn update_visable_block_status(&mut self) {
+        for (pos, block_scene) in self.block_scene_nodes.iter_mut() {
+            block_scene.set_visible(Self::is_block_visible(&self.blocks, pos));
+        }
+    }
+ 
+    #[inline]
+    fn is_block_visible(blocks: &HashMap<Point3<u8>, Block>, pos: &Point3<u8>) -> bool {
+        Self::get_block_neighbours(blocks, pos).len() != 26          // If completely surrounded then not visible
+    }
+
+    fn get_block_neighbours(blocks: &HashMap<Point3<u8>, Block>, pos: &Point3<u8>) -> Vec<Point3<u8>> {
         let temp_pos = Point3::new(pos.x as i16, pos.y as i16, pos.z as i16);
         let mut temp: Vec<Point3<i16>> = vec![ // 26 in total
             Point3::new(temp_pos.x - 1, temp_pos.y - 1, temp_pos.z - 1),
@@ -139,7 +145,7 @@ impl Chunk {
             Point3::new(temp_pos.x, temp_pos.y - 1, temp_pos.z + 1),
 
             Point3::new(temp_pos.x, temp_pos.y, temp_pos.z - 1),
-            Point3::new(temp_pos.x, temp_pos.y, 1),
+            Point3::new(temp_pos.x, temp_pos.y, temp_pos.z + 1),
 
             Point3::new(temp_pos.x, temp_pos.y + 1, temp_pos.z - 1),
             Point3::new(temp_pos.x, temp_pos.y + 1, temp_pos.z),
@@ -160,18 +166,17 @@ impl Chunk {
         ];
 
         // Only look in current chunk
-        temp.retain(|i| i.x > 0 && i.x < 256 && i.y > 0 && i.y < 256 && i.z > 0 && i.z < 256);
+        temp.retain(|i| i.x > -1 && i.x < 256 && i.y > -1 && i.y < 256 && i.z > -1 && i.z < 256);
 
         let mut out: Vec<Point3<u8>> = vec![];
         for p in temp.iter() {
             out.push(Point3::new(p.x as u8, p.y as u8, p.z as u8));
         }
         
-        out.retain(|i| self.blocks.contains_key(&i));
+        out.retain(|i| blocks.contains_key(&i));
 
         out
     }
-
 
     // Position conversions:
     // Block pos is Point3<i32>, can be below floor. This is for whole map.
